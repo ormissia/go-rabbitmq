@@ -33,6 +33,13 @@ type RabbitMQ struct {
 	MqURL        string           //连接信息-amqp://账号:密码@地址:端口号/-amqp://guest:guest@127.0.0.1:5672/
 }
 
+//定义RabbitMQ实例的接口
+//每种RabbitMQ实例都有发布和消费两种功能
+type RabbitMQInterface interface {
+	Publish(message string)
+	Consume() <-chan amqp.Delivery
+}
+
 //创建一个RabbitMQ实例
 func newRabbitMQ(exchangeName, queueName, key, mqUrl string) *RabbitMQ {
 	rabbitmq := &RabbitMQ{
@@ -56,7 +63,7 @@ func newRabbitMQ(exchangeName, queueName, key, mqUrl string) *RabbitMQ {
 func (r *RabbitMQ) Destroy() {
 	r.channel.Close()
 	r.conn.Close()
-	log.Fatalf("%s,%s 关闭了！", r.ExchangeName, r.QueueName)
+	log.Fatalf("%s,%s is closed!!!", r.ExchangeName, r.QueueName)
 }
 
 //错误处理
@@ -70,14 +77,20 @@ func (r *RabbitMQ) failOnError(err error, msg string) {
 1 Simple模式，最简单最常用的模式
 2 Work模式，一个消息只能被一个消费者消费
 */
+type RabbitMQSimple struct {
+	*RabbitMQ
+}
+
 //创建简单模式下的实例，只需要queueName这个参数，其中exchange是默认的，key则不需要。
-func NewRabbitMQSimple(queueName, mqUrl string) *RabbitMQ {
+func NewRabbitMQSimple(queueName, mqUrl string) *RabbitMQSimple {
 	rabbitmq := newRabbitMQ("", queueName, "", mqUrl)
-	return rabbitmq
+	return &RabbitMQSimple{
+		rabbitmq,
+	}
 }
 
 //直接模式,生产者.
-func (r *RabbitMQ) PublishSimple(message string) {
+func (r *RabbitMQSimple) Publish(message string) {
 	//1 申请队列，如不存在，则自动创建之，存在，则路过。
 	_, err := r.channel.QueueDeclare(
 		r.QueueName,
@@ -103,7 +116,7 @@ func (r *RabbitMQ) PublishSimple(message string) {
 }
 
 //直接模式，消费者
-func (r *RabbitMQ) ConsumeSimple() <-chan amqp.Delivery {
+func (r *RabbitMQSimple) Consume() <-chan amqp.Delivery {
 	//1 申请队列,如果队列不存在则自动创建,存在则跳过
 	q, err := r.channel.QueueDeclare(
 		r.QueueName,
@@ -133,16 +146,21 @@ func (r *RabbitMQ) ConsumeSimple() <-chan amqp.Delivery {
 /*
 3 Publish/Subscribe发布订阅模式
 */
+type RabbitMqSubscription struct {
+	*RabbitMQ
+}
 
 //获取订阅模式下的rabbitmq的实例
-func NewRabbitMqSubscription(exchangeName, mqUrl string) *RabbitMQ {
+func NewRabbitMqSubscription(exchangeName, mqUrl string) *RabbitMqSubscription {
 	//创建rabbitmq实例
 	rabbitmq := newRabbitMQ(exchangeName, "", "", mqUrl)
-	return rabbitmq
+	return &RabbitMqSubscription{
+		rabbitmq,
+	}
 }
 
 //订阅模式发布消息
-func (r *RabbitMQ) PublishSubscription(message string) {
+func (r *RabbitMqSubscription) Publish(message string) {
 	//1 尝试连接交换机
 	err := r.channel.ExchangeDeclare(
 		r.ExchangeName,
@@ -169,7 +187,7 @@ func (r *RabbitMQ) PublishSubscription(message string) {
 }
 
 //订阅模式消费者
-func (r *RabbitMQ) ConsumeSubscription() <-chan amqp.Delivery {
+func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 	//1 试探性创建交换机exchange
 	err := r.channel.ExchangeDeclare(
 		r.ExchangeName,
@@ -219,13 +237,20 @@ func (r *RabbitMQ) ConsumeSubscription() <-chan amqp.Delivery {
 /*
 4 Routing路由模式
 */
-func NewRabbitMqRouting(exchangeName, routingKey, mqUrl string) *RabbitMQ {
+type RabbitMqRouting struct {
+	*RabbitMQ
+}
+
+//获取路由模式下的rabbitmq的实例
+func NewRabbitMqRouting(exchangeName, routingKey, mqUrl string) *RabbitMqRouting {
 	rabbitmq := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
-	return rabbitmq
+	return &RabbitMqRouting{
+		rabbitmq,
+	}
 }
 
 //路由模式发送信息
-func (r *RabbitMQ) PublishRouting(message string) {
+func (r *RabbitMqRouting) Publish(message string) {
 	//1 尝试创建交换机，不存在创建
 	err := r.channel.ExchangeDeclare(
 		//交换机名称
@@ -260,7 +285,7 @@ func (r *RabbitMQ) PublishRouting(message string) {
 }
 
 //路由模式接收信息
-func (r *RabbitMQ) ConsumeRouting() <-chan amqp.Delivery {
+func (r *RabbitMqRouting) Consume() <-chan amqp.Delivery {
 	//1 尝试创建交换机，不存在创建
 	err := r.channel.ExchangeDeclare(
 		//交换机名称
@@ -319,13 +344,20 @@ func (r *RabbitMQ) ConsumeRouting() <-chan amqp.Delivery {
 /*
 5 Topic话题模式
 */
-func NewRabbitMqTopic(exchangeName, routingKey, mqUrl string) *RabbitMQ {
+type RabbitMqTopic struct {
+	*RabbitMQ
+}
+
+//获取话题模式下的rabbitmq的实例
+func NewRabbitMqTopic(exchangeName, routingKey, mqUrl string) *RabbitMqTopic {
 	rabbitmq := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
-	return rabbitmq
+	return &RabbitMqTopic{
+		rabbitmq,
+	}
 }
 
 //topic模式。生产者。
-func (r *RabbitMQ) PublishTopic(message string) {
+func (r *RabbitMqTopic) Publish(message string) {
 	//1 尝试创建交换机,这里的kind的类型要改为topic
 	err := r.channel.ExchangeDeclare(
 		r.ExchangeName,
@@ -351,7 +383,7 @@ func (r *RabbitMQ) PublishTopic(message string) {
 }
 
 //topic模式。消费者。"*"表示匹配一个单词。“#”表示匹配多个单词，亦可以是0个。
-func (r *RabbitMQ) ConsumeTopic() <-chan amqp.Delivery {
+func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 	//1 创建交换机。这里的kind需要是“topic”类型。
 	err := r.channel.ExchangeDeclare(
 		r.ExchangeName,
