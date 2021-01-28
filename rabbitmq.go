@@ -209,7 +209,7 @@ func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "订阅模式消费方法中创建创建队列失败。")
+	r.failOnError(err, "Failed to declare a queue")
 
 	//3 绑定队列到交换机中
 	err = r.channel.QueueBind(
@@ -219,6 +219,7 @@ func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
+	r.failOnError(err, "Failed to bind a queue")
 
 	//4 消费消息
 	msgs, err := r.channel.Consume(
@@ -230,6 +231,7 @@ func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
+	r.failOnError(err, "Failed to register a consumer")
 
 	return msgs
 }
@@ -325,6 +327,7 @@ func (r *RabbitMqRouting) Consume() <-chan amqp.Delivery {
 		nil,
 	)
 	r.failOnError(err, "Failed to bind a queue")
+
 	//4 消费消息
 	msgs, err := r.channel.Consume(
 		q.Name,
@@ -368,7 +371,7 @@ func (r *RabbitMqTopic) Publish(message string) {
 		false,
 		nil,
 	)
-	r.failOnError(err, "topic模式尝试创建exchange失败。")
+	r.failOnError(err, "Failed to declare an exchange")
 
 	//2 发送消息。
 	err = r.channel.Publish(
@@ -380,6 +383,7 @@ func (r *RabbitMqTopic) Publish(message string) {
 			ContentType: "text/plain",
 			Body:        []byte(message),
 		})
+	r.failOnError(err, "Failed to publish an message:"+message)
 }
 
 //topic模式。消费者。"*"表示匹配一个单词。“#”表示匹配多个单词，亦可以是0个。
@@ -394,7 +398,7 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "topic模式，消费者创建exchange失败。")
+	r.failOnError(err, "Failed to declare an exchange")
 
 	//2 创建队列。这里不用写队列名称。
 	q, err := r.channel.QueueDeclare(
@@ -405,7 +409,7 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "topic模式，消费者创建queue失败。")
+	r.failOnError(err, "Failed to declare a queue")
 
 	//3 将队列绑定到交换机里。
 	err = r.channel.QueueBind(
@@ -415,6 +419,7 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
+	r.failOnError(err, "Failed to bind a queue")
 
 	//4 消费消息
 	msgs, err := r.channel.Consume(
@@ -426,6 +431,7 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
+	r.failOnError(err, "Failed to register a consumer")
 
 	return msgs
 }
