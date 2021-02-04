@@ -6,6 +6,9 @@
 [![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ormissia/go-rabbitmq.svg)](https://pkg.go.dev/github.com/ormissia/go-rabbitmq)
 
+引用方式
+`go get github.com/ormissia/go-rabbitmq`
+
 #### 二次封装了RabbitMQ五种模式：
 1. Simple模式，最简单的模式，一个消息只能被一个消费者消费。 
    应用场景: 短信，聊天
