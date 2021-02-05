@@ -63,7 +63,7 @@ func newRabbitMQ(exchangeName, queueName, key, mqUrl string) *RabbitMQ {
 func (r *RabbitMQ) Destroy() {
 	r.channel.Close()
 	r.conn.Close()
-	log.Fatalf("%s,%s is closed!!!", r.ExchangeName, r.QueueName)
+	log.Printf("%s,%s is closed!!!", r.ExchangeName, r.QueueName)
 }
 
 //错误处理
@@ -83,6 +83,11 @@ type RabbitMQSimple struct {
 
 //创建简单模式下的实例，只需要queueName这个参数，其中exchange是默认的，key则不需要。
 func NewRabbitMQSimple(queueName, mqUrl string) *RabbitMQSimple {
+	//判断是否输入必要的信息
+	if queueName == "" || mqUrl == "" {
+		log.Fatalf("QueueName and mqUrl is required,\nbut queueName and mqUrl are %s and %s.", queueName, mqUrl)
+		return nil
+	}
 	rabbitmq := newRabbitMQ("", queueName, "", mqUrl)
 	return &RabbitMQSimple{
 		rabbitmq,
@@ -152,6 +157,11 @@ type RabbitMqSubscription struct {
 
 //获取订阅模式下的rabbitmq的实例
 func NewRabbitMqSubscription(exchangeName, mqUrl string) *RabbitMqSubscription {
+	//判断是否输入必要的信息
+	if exchangeName == "" || mqUrl == "" {
+		log.Fatalf("ExchangeName and mqUrl is required,\nbut exchangeName and mqUrl are %s and %s.", exchangeName, mqUrl)
+		return nil
+	}
 	//创建rabbitmq实例
 	rabbitmq := newRabbitMQ(exchangeName, "", "", mqUrl)
 	return &RabbitMqSubscription{
@@ -245,6 +255,11 @@ type RabbitMqRouting struct {
 
 //获取路由模式下的rabbitmq的实例
 func NewRabbitMqRouting(exchangeName, routingKey, mqUrl string) *RabbitMqRouting {
+	//判断是否输入必要的信息
+	if exchangeName == "" || routingKey == "" || mqUrl == "" {
+		log.Fatalf("ExchangeName, routingKey and mqUrl is required,\nbut exchangeName, routingKey and mqUrl are %s and %s.", exchangeName, routingKey, mqUrl)
+		return nil
+	}
 	rabbitmq := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
 	return &RabbitMqRouting{
 		rabbitmq,
@@ -353,6 +368,11 @@ type RabbitMqTopic struct {
 
 //获取话题模式下的rabbitmq的实例
 func NewRabbitMqTopic(exchangeName, routingKey, mqUrl string) *RabbitMqTopic {
+	//判断是否输入必要的信息
+	if exchangeName == "" || routingKey == "" || mqUrl == "" {
+		log.Fatalf("ExchangeName, routingKey and mqUrl is required,\nbut exchangeName, routingKey and mqUrl are %s and %s.", exchangeName, routingKey, mqUrl)
+		return nil
+	}
 	rabbitmq := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
 	return &RabbitMqTopic{
 		rabbitmq,
