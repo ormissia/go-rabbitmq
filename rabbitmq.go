@@ -5,6 +5,7 @@
 package gorabbitmq
 
 import (
+	errors "errors"
 	"github.com/streadway/amqp"
 	"log"
 )
@@ -36,27 +37,29 @@ type RabbitMQ struct {
 //定义RabbitMQ实例的接口
 //每种RabbitMQ实例都有发布和消费两种功能
 type RabbitMQInterface interface {
-	Publish(message string)
-	Consume() <-chan amqp.Delivery
+	Publish(message string) (err error)
+	Consume() (consumeChan <-chan amqp.Delivery, err error)
 }
 
 //创建一个RabbitMQ实例
-func newRabbitMQ(exchangeName, queueName, key, mqUrl string) *RabbitMQ {
-	rabbitmq := &RabbitMQ{
+func newRabbitMQ(exchangeName, queueName, key, mqUrl string) (rabbitmq *RabbitMQ, err error) {
+	rabbitmq = &RabbitMQ{
 		QueueName:    queueName,
 		ExchangeName: exchangeName,
 		Key:          key,
 		MqURL:        mqUrl,
 	}
-	var err error
 	//创建rabbitmq连接
 	rabbitmq.conn, err = amqp.Dial(rabbitmq.MqURL)
-	rabbitmq.failOnError(err, "Failed to connect to RabbitMQ")
+	if err != nil {
+		return nil, err
+	}
 	//
 	rabbitmq.channel, err = rabbitmq.conn.Channel()
-	rabbitmq.failOnError(err, "Failed to open a channel")
-
-	return rabbitmq
+	if err != nil {
+		return nil, err
+	}
+	return rabbitmq, nil
 }
 
 //断开channel和connection
@@ -64,13 +67,6 @@ func (r *RabbitMQ) Destroy() {
 	r.channel.Close()
 	r.conn.Close()
 	log.Printf("%s,%s is closed!!!", r.ExchangeName, r.QueueName)
-}
-
-//错误处理
-func (r *RabbitMQ) failOnError(err error, msg string) {
-	if err != nil {
-		log.Fatalf("%s: %s", msg, err)
-	}
 }
 
 /*
@@ -82,22 +78,25 @@ type RabbitMQSimple struct {
 }
 
 //创建简单模式下的实例，只需要queueName这个参数，其中exchange是默认的，key则不需要。
-func NewRabbitMQSimple(queueName, mqUrl string) *RabbitMQSimple {
+func NewRabbitMQSimple(queueName, mqUrl string) (rabbitMQSimple *RabbitMQSimple, err error) {
 	//判断是否输入必要的信息
 	if queueName == "" || mqUrl == "" {
 		log.Fatalf("QueueName and mqUrl is required,\nbut queueName and mqUrl are %s and %s.", queueName, mqUrl)
-		return nil
+		return nil, errors.New("QueueName and mqUrl is required")
 	}
-	rabbitmq := newRabbitMQ("", queueName, "", mqUrl)
+	rabbitmq, err := newRabbitMQ("", queueName, "", mqUrl)
+	if err != nil {
+		return nil, err
+	}
 	return &RabbitMQSimple{
 		rabbitmq,
-	}
+	}, nil
 }
 
 //直接模式,生产者.
-func (r *RabbitMQSimple) Publish(message string) {
+func (r *RabbitMQSimple) Publish(message string) (err error) {
 	//1 申请队列，如不存在，则自动创建之，存在，则路过。
-	_, err := r.channel.QueueDeclare(
+	_, err = r.channel.QueueDeclare(
 		r.QueueName,
 		false,
 		false,
@@ -105,7 +104,9 @@ func (r *RabbitMQSimple) Publish(message string) {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare a queue")
+	if err != nil {
+		return err
+	}
 
 	//2 发送消息到队列中
 	err = r.channel.Publish(
@@ -117,11 +118,14 @@ func (r *RabbitMQSimple) Publish(message string) {
 			ContentType: "text/plain",
 			Body:        []byte(message),
 		})
-	r.failOnError(err, "Failed to publish an message:"+message)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 //直接模式，消费者
-func (r *RabbitMQSimple) Consume() <-chan amqp.Delivery {
+func (r *RabbitMQSimple) Consume() (consumeChan <-chan amqp.Delivery, err error) {
 	//1 申请队列,如果队列不存在则自动创建,存在则跳过
 	q, err := r.channel.QueueDeclare(
 		r.QueueName,
@@ -131,10 +135,12 @@ func (r *RabbitMQSimple) Consume() <-chan amqp.Delivery {
 		false, //是否阻塞处理
 		nil,   //额外的属性
 	)
-	r.failOnError(err, "Failed to declare a queue")
+	if err != nil {
+		return nil, err
+	}
 
 	//2 接收消息
-	msgs, err := r.channel.Consume(
+	consumeChan, err = r.channel.Consume(
 		q.Name,
 		"",   //用来区分多个消费者
 		true, //是否自动应答,告诉我已经消费完了
@@ -143,9 +149,11 @@ func (r *RabbitMQSimple) Consume() <-chan amqp.Delivery {
 		false, //消费队列是否设计阻塞
 		nil,
 	)
-	r.failOnError(err, "Failed to register a consumer")
+	if err != nil {
+		return nil, err
+	}
 
-	return msgs
+	return consumeChan, nil
 }
 
 /*
@@ -156,23 +164,26 @@ type RabbitMqSubscription struct {
 }
 
 //获取订阅模式下的rabbitmq的实例
-func NewRabbitMqSubscription(exchangeName, mqUrl string) *RabbitMqSubscription {
+func NewRabbitMqSubscription(exchangeName, mqUrl string) (rabbitMqSubscription *RabbitMqSubscription, err error) {
 	//判断是否输入必要的信息
 	if exchangeName == "" || mqUrl == "" {
 		log.Fatalf("ExchangeName and mqUrl is required,\nbut exchangeName and mqUrl are %s and %s.", exchangeName, mqUrl)
-		return nil
+		return nil, errors.New("ExchangeName and mqUrl is required")
 	}
 	//创建rabbitmq实例
-	rabbitmq := newRabbitMQ(exchangeName, "", "", mqUrl)
+	rabbitmq, err := newRabbitMQ(exchangeName, "", "", mqUrl)
+	if err != nil {
+		return nil, err
+	}
 	return &RabbitMqSubscription{
 		rabbitmq,
-	}
+	}, nil
 }
 
 //订阅模式发布消息
-func (r *RabbitMqSubscription) Publish(message string) {
+func (r *RabbitMqSubscription) Publish(message string) (err error) {
 	//1 尝试连接交换机
-	err := r.channel.ExchangeDeclare(
+	err = r.channel.ExchangeDeclare(
 		r.ExchangeName,
 		"fanout", //这里一定要设计为"fanout"也就是广播类型。
 		true,
@@ -181,7 +192,9 @@ func (r *RabbitMqSubscription) Publish(message string) {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare an exchange")
+	if err != nil {
+		return err
+	}
 
 	//2 发送消息
 	err = r.channel.Publish(
@@ -193,13 +206,17 @@ func (r *RabbitMqSubscription) Publish(message string) {
 			ContentType: "text/plain",
 			Body:        []byte(message),
 		})
-	r.failOnError(err, "Failed to publish an message:"+message)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 //订阅模式消费者
-func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
+func (r *RabbitMqSubscription) Consume() (consumeChan <-chan amqp.Delivery, err error) {
 	//1 试探性创建交换机exchange
-	err := r.channel.ExchangeDeclare(
+	err = r.channel.ExchangeDeclare(
 		r.ExchangeName,
 		"fanout",
 		true,
@@ -208,7 +225,9 @@ func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare an exchange")
+	if err != nil {
+		return nil, err
+	}
 
 	//2 试探性创建队列queue
 	q, err := r.channel.QueueDeclare(
@@ -219,7 +238,9 @@ func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare a queue")
+	if err != nil {
+		return nil, err
+	}
 
 	//3 绑定队列到交换机中
 	err = r.channel.QueueBind(
@@ -229,10 +250,12 @@ func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to bind a queue")
+	if err != nil {
+		return nil, err
+	}
 
 	//4 消费消息
-	msgs, err := r.channel.Consume(
+	consumeChan, err = r.channel.Consume(
 		q.Name,
 		"",
 		true,
@@ -241,9 +264,11 @@ func (r *RabbitMqSubscription) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to register a consumer")
+	if err != nil {
+		return nil, err
+	}
 
-	return msgs
+	return consumeChan, nil
 }
 
 /*
@@ -254,22 +279,25 @@ type RabbitMqRouting struct {
 }
 
 //获取路由模式下的rabbitmq的实例
-func NewRabbitMqRouting(exchangeName, routingKey, mqUrl string) *RabbitMqRouting {
+func NewRabbitMqRouting(exchangeName, routingKey, mqUrl string) (rabbitMqRouting *RabbitMqRouting, err error) {
 	//判断是否输入必要的信息
 	if exchangeName == "" || routingKey == "" || mqUrl == "" {
-		log.Fatalf("ExchangeName, routingKey and mqUrl is required,\nbut exchangeName, routingKey and mqUrl are %s and %s.", exchangeName, routingKey, mqUrl)
-		return nil
+		log.Fatalf("ExchangeName, routingKey and mqUrl is required,\nbut exchangeName, routingKey and mqUrl are %s, %s and %s.", exchangeName, routingKey, mqUrl)
+		return nil, errors.New("ExchangeName, routingKey and mqUrl is required")
 	}
-	rabbitmq := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
+	rabbitmq, err := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
+	if err != nil {
+		return nil, err
+	}
 	return &RabbitMqRouting{
 		rabbitmq,
-	}
+	}, nil
 }
 
 //路由模式发送信息
-func (r *RabbitMqRouting) Publish(message string) {
+func (r *RabbitMqRouting) Publish(message string) (err error) {
 	//1 尝试创建交换机，不存在创建
-	err := r.channel.ExchangeDeclare(
+	err = r.channel.ExchangeDeclare(
 		//交换机名称
 		r.ExchangeName,
 		//交换机类型 广播类型
@@ -284,7 +312,10 @@ func (r *RabbitMqRouting) Publish(message string) {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare an exchange")
+	if err != nil {
+		return err
+	}
+
 	//2 发送信息
 	err = r.channel.Publish(
 		r.ExchangeName,
@@ -298,13 +329,17 @@ func (r *RabbitMqRouting) Publish(message string) {
 			//消息
 			Body: []byte(message),
 		})
-	r.failOnError(err, "Failed to publish an message:"+message)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 //路由模式接收信息
-func (r *RabbitMqRouting) Consume() <-chan amqp.Delivery {
+func (r *RabbitMqRouting) Consume() (consumeChan <-chan amqp.Delivery, err error) {
 	//1 尝试创建交换机，不存在创建
-	err := r.channel.ExchangeDeclare(
+	err = r.channel.ExchangeDeclare(
 		//交换机名称
 		r.ExchangeName,
 		//交换机类型 广播类型
@@ -319,7 +354,9 @@ func (r *RabbitMqRouting) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare an exchange")
+	if err != nil {
+		return nil, err
+	}
 
 	//2 试探性创建队列
 	q, err := r.channel.QueueDeclare(
@@ -330,7 +367,9 @@ func (r *RabbitMqRouting) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare a queue")
+	if err != nil {
+		return nil, err
+	}
 
 	//3 绑定队列到exchange中
 	err = r.channel.QueueBind(
@@ -341,10 +380,12 @@ func (r *RabbitMqRouting) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to bind a queue")
+	if err != nil {
+		return nil, err
+	}
 
 	//4 消费消息
-	msgs, err := r.channel.Consume(
+	consumeChan, err = r.channel.Consume(
 		q.Name,
 		"",
 		true,
@@ -353,36 +394,41 @@ func (r *RabbitMqRouting) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to register a consumer")
+	if err != nil {
+		return nil, err
+	}
 
 	//5 直接把amqp的channel返回给调用者
-	return msgs
+	return consumeChan, nil
 }
 
 /*
 5 Topic话题模式
 */
-type RabbitMqTopic struct {
+type RabbitMQTopic struct {
 	*RabbitMQ
 }
 
 //获取话题模式下的rabbitmq的实例
-func NewRabbitMqTopic(exchangeName, routingKey, mqUrl string) *RabbitMqTopic {
+func NewRabbitMqTopic(exchangeName, routingKey, mqUrl string) (rabbitMQTopic *RabbitMQTopic, err error) {
 	//判断是否输入必要的信息
 	if exchangeName == "" || routingKey == "" || mqUrl == "" {
 		log.Fatalf("ExchangeName, routingKey and mqUrl is required,\nbut exchangeName, routingKey and mqUrl are %s and %s.", exchangeName, routingKey, mqUrl)
-		return nil
+		return nil, errors.New("ExchangeName, routingKey and mqUrl is required")
 	}
-	rabbitmq := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
-	return &RabbitMqTopic{
+	rabbitmq, err := newRabbitMQ(exchangeName, "", routingKey, mqUrl)
+	if err != nil {
+		return nil, err
+	}
+	return &RabbitMQTopic{
 		rabbitmq,
-	}
+	}, nil
 }
 
 //topic模式。生产者。
-func (r *RabbitMqTopic) Publish(message string) {
+func (r *RabbitMQTopic) Publish(message string) (err error) {
 	//1 尝试创建交换机,这里的kind的类型要改为topic
-	err := r.channel.ExchangeDeclare(
+	err = r.channel.ExchangeDeclare(
 		r.ExchangeName,
 		"topic",
 		true,
@@ -391,7 +437,9 @@ func (r *RabbitMqTopic) Publish(message string) {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare an exchange")
+	if err != nil {
+		return err
+	}
 
 	//2 发送消息。
 	err = r.channel.Publish(
@@ -403,13 +451,16 @@ func (r *RabbitMqTopic) Publish(message string) {
 			ContentType: "text/plain",
 			Body:        []byte(message),
 		})
-	r.failOnError(err, "Failed to publish an message:"+message)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 //topic模式。消费者。"*"表示匹配一个单词。“#”表示匹配多个单词，亦可以是0个。
-func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
+func (r *RabbitMQTopic) Consume() (consumeChan <-chan amqp.Delivery, err error) {
 	//1 创建交换机。这里的kind需要是“topic”类型。
-	err := r.channel.ExchangeDeclare(
+	err = r.channel.ExchangeDeclare(
 		r.ExchangeName,
 		"topic",
 		true, //这里需要是true
@@ -418,7 +469,9 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare an exchange")
+	if err != nil {
+		return nil, err
+	}
 
 	//2 创建队列。这里不用写队列名称。
 	q, err := r.channel.QueueDeclare(
@@ -429,7 +482,9 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to declare a queue")
+	if err != nil {
+		return nil, err
+	}
 
 	//3 将队列绑定到交换机里。
 	err = r.channel.QueueBind(
@@ -439,10 +494,12 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to bind a queue")
+	if err != nil {
+		return nil, err
+	}
 
 	//4 消费消息
-	msgs, err := r.channel.Consume(
+	consumeChan, err = r.channel.Consume(
 		q.Name,
 		"",
 		true,
@@ -451,7 +508,9 @@ func (r *RabbitMqTopic) Consume() <-chan amqp.Delivery {
 		false,
 		nil,
 	)
-	r.failOnError(err, "Failed to register a consumer")
+	if err != nil {
+		return nil, err
+	}
 
-	return msgs
+	return consumeChan, nil
 }

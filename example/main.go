@@ -22,10 +22,16 @@ func main() {
 
 //eg. Work Mode 1/2
 func example12() {
-	rabbitmq1 := gorabbitmq.NewRabbitMQSimple("queue1", MQURL)
+	rabbitmq1, err1 := gorabbitmq.NewRabbitMQSimple("queue1", MQURL)
 	defer rabbitmq1.Destroy()
-	rabbitmq2 := gorabbitmq.NewRabbitMQSimple("queue1", MQURL)
+	if err1 != nil {
+		log.Println(err1)
+	}
+	rabbitmq2, err2 := gorabbitmq.NewRabbitMQSimple("queue1", MQURL)
 	defer rabbitmq2.Destroy()
+	if err2 != nil {
+		log.Println(err2)
+	}
 
 	go func() {
 		for i := 0; i < 10000; i++ {
@@ -34,7 +40,10 @@ func example12() {
 	}()
 
 	go func() {
-		msgs := rabbitmq2.Consume()
+		msgs, err3 := rabbitmq2.Consume()
+		if err3 != nil {
+			log.Println(err3)
+		}
 		for d := range msgs {
 			log.Printf("接受到了：%s", d.Body)
 		}
@@ -46,10 +55,16 @@ func example12() {
 
 //eg. Work Mode 3
 func example3() {
-	rabbitmq1 := gorabbitmq.NewRabbitMqSubscription("exchange.example3", MQURL)
+	rabbitmq1, err1 := gorabbitmq.NewRabbitMqSubscription("exchange.example3", MQURL)
 	defer rabbitmq1.Destroy()
-	rabbitmq2 := gorabbitmq.NewRabbitMqSubscription("exchange.example3", MQURL)
+	if err1 != nil {
+		log.Println(err1)
+	}
+	rabbitmq2, err2 := gorabbitmq.NewRabbitMqSubscription("exchange.example3", MQURL)
 	defer rabbitmq2.Destroy()
+	if err2 != nil {
+		log.Println(err2)
+	}
 
 	go func() {
 		for i := 0; i < 10000; i++ {
@@ -58,7 +73,10 @@ func example3() {
 	}()
 
 	go func() {
-		msgs := rabbitmq2.Consume()
+		msgs, err3 := rabbitmq2.Consume()
+		if err3 != nil {
+			log.Println(err3)
+		}
 		for d := range msgs {
 			log.Printf("接受到了：%s", d.Body)
 		}
@@ -70,12 +88,21 @@ func example3() {
 
 //eg. Work Mode 4
 func example4() {
-	rabbitmq1 := gorabbitmq.NewRabbitMqRouting("exchange.example4", "key.one", MQURL)
+	rabbitmq1, err1 := gorabbitmq.NewRabbitMqRouting("exchange.example4", "key.one", MQURL)
 	defer rabbitmq1.Destroy()
-	rabbitmq2 := gorabbitmq.NewRabbitMqRouting("exchange.example4", "key.one", MQURL)
+	if err1 != nil {
+		log.Println(err1)
+	}
+	rabbitmq2, err2 := gorabbitmq.NewRabbitMqRouting("exchange.example4", "key.one", MQURL)
 	defer rabbitmq2.Destroy()
-	rabbitmq3 := gorabbitmq.NewRabbitMqRouting("exchange.example4", "key.two", MQURL)
+	if err2 != nil {
+		log.Println(err2)
+	}
+	rabbitmq3, err3 := gorabbitmq.NewRabbitMqRouting("exchange.example4", "key.two", MQURL)
 	defer rabbitmq3.Destroy()
+	if err3 != nil {
+		log.Println(err3)
+	}
 
 	go func() {
 		for i := 0; i < 10000; i++ {
@@ -84,13 +111,19 @@ func example4() {
 	}()
 
 	go func() {
-		msgs := rabbitmq2.Consume()
+		msgs, err4 := rabbitmq2.Consume()
+		if err4 != nil {
+			log.Println(err4)
+		}
 		for d := range msgs {
 			log.Printf("key.one接受到了：%s", d.Body)
 		}
 	}()
 	go func() {
-		msgs := rabbitmq3.Consume()
+		msgs, err5 := rabbitmq3.Consume()
+		if err5 != nil {
+			log.Println(err5)
+		}
 		for d := range msgs {
 			log.Printf("key.two接受到了：%s", d.Body)
 		}
@@ -102,14 +135,26 @@ func example4() {
 
 //eg. Work Mode 5
 func example5() {
-	rabbitmq1 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.one", MQURL)
+	rabbitmq1, err1 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.one", MQURL)
 	defer rabbitmq1.Destroy()
-	rabbitmq2 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.one", MQURL)
+	if err1 != nil {
+		log.Println(err1)
+	}
+	rabbitmq2, err2 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.one", MQURL)
 	defer rabbitmq2.Destroy()
-	rabbitmq3 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.two", MQURL)
+	if err2 != nil {
+		log.Println(err2)
+	}
+	rabbitmq3, err3 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.two", MQURL)
 	defer rabbitmq3.Destroy()
-	rabbitmq4 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.*", MQURL)
+	if err3 != nil {
+		log.Println(err3)
+	}
+	rabbitmq4, err4 := gorabbitmq.NewRabbitMqTopic("exchange.example5", "key.*", MQURL)
 	defer rabbitmq4.Destroy()
+	if err4 != nil {
+		log.Println(err4)
+	}
 
 	go func() {
 		for i := 0; i < 10000; i++ {
@@ -118,19 +163,28 @@ func example5() {
 	}()
 
 	go func() {
-		msgs := rabbitmq2.Consume()
+		msgs, err5 := rabbitmq2.Consume()
+		if err5 != nil {
+			log.Println(err5)
+		}
 		for d := range msgs {
 			log.Printf("key.one接受到了：%s", d.Body)
 		}
 	}()
 	go func() {
-		msgs := rabbitmq3.Consume()
+		msgs, err6 := rabbitmq3.Consume()
+		if err6 != nil {
+			log.Println(err6)
+		}
 		for d := range msgs {
 			log.Printf("key.two接受到了：%s", d.Body)
 		}
 	}()
 	go func() {
-		msgs := rabbitmq4.Consume()
+		msgs, err7 := rabbitmq4.Consume()
+		if err7 != nil {
+			log.Println(err7)
+		}
 		for d := range msgs {
 			log.Printf("key.*接受到了：%s", d.Body)
 		}
